@@ -14,10 +14,17 @@
     // Hàm gọi API create-email
     async function fetchEmail() {
         try {
+            // TẠO authToken duy nhất cho mỗi lần gọi
+            const authToken = 'client-token-' + Date.now() + Math.random();
+
             const res = await fetch('https://my-proxy-vercel.vercel.app/api/create-email', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ domainId: 'RG9tYWluOjI=' }) // @10mail.org
+                // GỬI authToken trong body
+                body: JSON.stringify({
+                    domainId: 'RG9tYWluOjI=', // @10mail.org
+                    authToken: authToken
+                })
             });
             if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
             const json = await res.json();
@@ -26,7 +33,9 @@
             const sessionId = json?.data?.introduceSession?.id;
             const restoreKey = json?.data?.introduceSession?.addresses?.[0]?.restoreKey;
             if (!email || !sessionId) throw new Error("❌ Không lấy được email hoặc sessionId từ API");
-            return { email, sessionId, restoreKey };
+
+            // TRẢ VỀ authToken để hàm check-email có thể dùng
+            return { email, sessionId, restoreKey, authToken };
         } catch (err) {
             console.error("❌ Lỗi khi gọi API create-email:", err.message);
             throw err;
@@ -34,9 +43,9 @@
     }
 
     // Hàm gọi API check-email và lấy mã xác minh
-    async function fetchVerificationCode(sessionId) {
-        if (!sessionId) {
-            console.warn("⚠️ Không có sessionId, bỏ qua bước lấy mã xác minh tự động");
+    async function fetchVerificationCode(sessionId, authToken) { // NHẬN thêm authToken
+        if (!sessionId || !authToken) {
+            console.warn("⚠️ Không có sessionId hoặc authToken, bỏ qua bước lấy mã xác minh tự động");
             return null;
         }
         for (let i = 0; i < 30; i++) {
@@ -44,7 +53,11 @@
                 const res = await fetch(`https://my-proxy-vercel.vercel.app/api/check-email`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sessionId })
+                    // GỬI cả sessionId và authToken
+                    body: JSON.stringify({
+                        sessionId: sessionId,
+                        authToken: authToken
+                    })
                 });
                 if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
                 const json = await res.json();
@@ -157,7 +170,7 @@
                 console.log("✅ Đã đóng dialog với selector:", selector);
                 return;
             } catch (err) {
-                console.log(`⚠️ Không tìm thấy dialog với selector ${selector}`);
+                // Ignore error and try next selector
             }
         }
         console.warn("⚠️ Không tìm thấy dialog để đóng, tiếp tục...");
@@ -166,12 +179,13 @@
     // Hàm thực hiện flow đăng ký và follow
     async function runFlow(followLink) {
         try {
-            // Lấy email, sessionId và restoreKey
-            const { email, sessionId, restoreKey } = await fetchEmail();
+            // Lấy email, sessionId, restoreKey và authToken
+            const { email, sessionId, restoreKey, authToken } = await fetchEmail();
             const password = generatePassword();
             console.log("📧 Email:", email);
             console.log("🔐 Password:", password);
             console.log("🔑 sessionId:", sessionId);
+            console.log("🔑 authToken:", authToken); // Ghi log cả authToken
             console.log("🔑 restoreKey:", restoreKey || "Không có restoreKey");
 
             // Bắt đầu luồng đăng ký
@@ -235,8 +249,8 @@
             console.log("➡️ Captcha đã xử lý, tìm trường mã xác minh...");
             const codeInput = await waitForElement('input[placeholder="Verification Code"]', 60000);
 
-            // Lấy mã xác minh
-            const code = await fetchVerificationCode(sessionId);
+            // Lấy mã xác minh, truyền cả sessionId và authToken
+            const code = await fetchVerificationCode(sessionId, authToken);
             if (!code) {
                 console.log("⚠️ Không có mã xác minh tự động, cần nhập mã thủ công");
                 const finalSubmitBtn = await waitForButtonEnabled('button.generic-button.critical.large', 60000);
