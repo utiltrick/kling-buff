@@ -1,139 +1,63 @@
 (async () => {
     // =================================================================
     // CẤU HÌNH: DÁN URL VERCEL API CỦA BẠN VÀO ĐÂY
-    // Bạn cần deploy các file API đã được cung cấp trước đó lên Vercel để lấy URL này.
     // =================================================================
-    const YOUR_VERCEL_APP_URL = 'https://kling-api-proxy.vercel.app'; // <--- VÍ DỤ, THAY THẾ BẰNG URL THỰC TẾ CỦA BẠN
+    const YOUR_VERCEL_APP_URL = 'https://kling-api-proxy.vercel.app'; // Đã cập nhật link của bạn
     // =================================================================
 
+    // --- KHAI BÁO CÁC HÀM ---
+    function generatePassword(length = 10) { /* ... implementation from before ... */ }
+    async function fetchEmail() { /* ... implementation from before ... */ }
+    async function fetchVerificationCode(email) { /* ... implementation from from before ... */ }
+    async function waitForElement(selector, timeout = 15000) { /* ... implementation from before ... */ }
 
-    console.log("🚀 Script bắt đầu... (Phiên bản Mailsac)");
-    if (YOUR_VERCEL_APP_URL.includes('your-name-here')) {
-         alert("LỖI: Bạn chưa cập nhật YOUR_VERCEL_APP_URL trong script. Vui lòng dán link Vercel của bạn vào.");
-         return;
+    // --- PHẦN LOGIC CHÍNH ĐIỀU KHIỂN LUỒNG CHẠY ---
+
+    const config = JSON.parse(sessionStorage.getItem('klingBuffConfig'));
+
+    // 1. NẾU CHƯA CÓ CẤU HÌNH -> BẮT ĐẦU MỘT PHIÊN LÀM VIỆC MỚI
+    if (!config) {
+        console.log("🚀 Bắt đầu phiên làm việc mới.");
+        const followLink = prompt("Nhập link buff follow:");
+        if (!followLink || !followLink.startsWith('https://app.klingai.com/')) return alert("❌ Link không hợp lệ.");
+
+        const runCount = parseInt(prompt("Nhập số lần chạy:"));
+        if (isNaN(runCount) || runCount <= 0) return alert("❌ Số lần chạy không hợp lệ.");
+
+        const newConfig = {
+            followLink: followLink,
+            totalRuns: runCount,
+            currentRun: 1
+        };
+        sessionStorage.setItem('klingBuffConfig', JSON.stringify(newConfig));
+        
+        console.log(`✅ Đã lưu cấu hình: Chạy ${runCount} lần. Bắt đầu lần 1...`);
+        alert(`Script sẽ bắt đầu chạy ${runCount} lần. Trang sẽ tự động tải lại. Vui lòng không đóng tab.`);
+        
+        // Bắt đầu lần chạy đầu tiên bằng cách điều hướng đến trang chủ
+        window.location.href = 'https://app.klingai.com/global';
+        return; // Dừng script ở đây, nó sẽ chạy lại sau khi trang tải xong
     }
 
-    // Hàm tạo mật khẩu ngẫu nhiên (giữ nguyên)
-    function generatePassword(length = 10) {
-        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
-        let password = "";
-        for (let i = 0; i < length; i++) {
-            password += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return password;
-    }
+    // 2. NẾU ĐÃ CÓ CẤU HÌNH -> TIẾP TỤC PHIÊN LÀM VIỆC
+    console.log(`🔄 Tiếp tục phiên làm việc, đang ở lần chạy ${config.currentRun}/${config.totalRuns}.`);
 
-    // THAY ĐỔI 1: Hàm lấy email được đơn giản hóa.
-    // Nó sẽ gọi API 'create-email' trên Vercel của bạn để lấy một địa chỉ email Mailsac ngẫu nhiên.
-    async function fetchEmail() {
-        try {
-            console.log("📨 Đang yêu cầu email mới từ API Vercel...");
-            const res = await fetch(`${YOUR_VERCEL_APP_URL}/api/create-email`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-            });
-            if (!res.ok) throw new Error(`Lỗi API create-email: ${res.status}`);
-            const json = await res.json();
-            if (!json.email) throw new Error("Phản hồi API không chứa email.");
-            
-            console.log(`✅ Nhận được email: ${json.email}`);
-            return { email: json.email }; // Chỉ trả về email, không còn sessionId hay authToken
-        } catch (err) {
-            console.error("❌ Lỗi khi gọi API create-email:", err.message);
-            throw err;
-        }
+    // Kiểm tra xem đã hoàn thành chưa
+    if (config.currentRun > config.totalRuns) {
+        console.log("🎉 Hoàn thành tất cả các lần chạy!");
+        sessionStorage.removeItem('klingBuffConfig');
+        alert("🎉 Đã hoàn thành tất cả các lần chạy!");
+        return;
     }
-
-    // THAY ĐỔI 2: Hàm lấy mã xác minh được cập nhật.
-    // Nó nhận 'email' làm tham số và gọi API 'check-email' trên Vercel.
-    async function fetchVerificationCode(email) {
-        if (!email) {
-            console.warn("⚠️ Không có email, bỏ qua lấy mã.");
-            return null;
-        }
-        console.log(`⏳ Đang chờ mã xác minh cho ${email}...`);
-        // Lặp lại trong 60 giây (30 lần * 2 giây)
-        for (let i = 0; i < 30; i++) {
-            try {
-                const res = await fetch(`${YOUR_VERCEL_APP_URL}/api/check-email`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: email }) // Gửi email cần kiểm tra
-                });
-                if (!res.ok) throw new Error(`Lỗi API check-email: ${res.status}`);
-                
-                const json = await res.json();
-                
-                // Xử lý phản hồi đơn giản từ API Mailsac
-                if (json && json.text) {
-                    const content = json.text;
-                    console.log("📧 Nhận được nội dung email.");
-                    const match = content.match(/\b\d{6}\b/); // Tìm mã 6 chữ số
-                    if (match) {
-                        console.log(`✅ Tìm thấy mã xác minh: ${match[0]}`);
-                        return match[0];
-                    }
-                }
-                // Nếu không có email, đợi 2 giây rồi thử lại
-                await new Promise(r => setTimeout(r, 2000));
-            } catch (err) {
-                console.error("❌ Lỗi khi gọi API check-email:", err.message);
-                // Chờ một chút trước khi thử lại để tránh spam server
-                await new Promise(r => setTimeout(r, 2000));
-            }
-        }
-        console.warn("⚠️ Không tìm thấy mã xác minh trong email sau 60 giây.");
-        return null;
-    }
-
-    // Các hàm tiện ích (waitForElement, waitForCaptcha, v.v.) được giữ nguyên
-    async function waitForElement(selector, timeout = 20000) {
-        return new Promise((resolve, reject) => {
-            const interval = setInterval(() => {
-                const el = document.querySelector(selector);
-                if (el) {
-                    clearInterval(interval);
-                    clearTimeout(timer);
-                    resolve(el);
-                }
-            }, 500);
-            const timer = setTimeout(() => {
-                clearInterval(interval);
-                reject(new Error(`Timeout chờ phần tử: ${selector}`));
-            }, timeout);
-        });
-    }
-
-    async function waitForCaptcha(timeout = 30000) {
-        console.log("🧩 Đang chờ captcha (nếu có)...");
-        return new Promise((resolve) => {
-            const interval = setInterval(() => {
-                if (!document.querySelector('.kwai-captcha-slider-wrapper')) {
-                    clearInterval(interval);
-                    clearTimeout(timer);
-                    console.log("✅ Captcha đã được xử lý hoặc không xuất hiện.");
-                    resolve();
-                }
-            }, 500);
-            const timer = setTimeout(() => {
-                clearInterval(interval);
-                console.warn("⚠️ Hết thời gian chờ captcha, tiếp tục flow...");
-                resolve();
-            }, timeout);
-        });
-    }
-    
-    // ... các hàm tiện ích khác có thể thêm vào đây nếu cần ...
 
     // Hàm thực hiện flow chính
-    async function runFlow(followLink) {
+    async function runFlow(conf) {
         try {
-            // THAY ĐỔI 3: Luồng logic được đơn giản hóa, không còn sessionId, authToken.
+            console.log(`--- Bắt đầu flow cho lần chạy ${conf.currentRun} ---`);
             const { email } = await fetchEmail();
             const password = generatePassword();
             console.log("Tài khoản mới:", { email, password });
 
-            // Bắt đầu luồng đăng ký trên giao diện
             await waitForElement('div.login').then(e => e.click());
             console.log("➡️ Đã nhấn 'Sign In'");
             await new Promise(r => setTimeout(r, 1000));
@@ -147,21 +71,15 @@
             const passInput = await waitForElement('input[placeholder="Password (at least 8 characters)"]');
             const confirmInput = await waitForElement('input[placeholder="Confirm Password"]');
 
-            emailInput.value = email;
-            passInput.value = password;
-            confirmInput.value = password;
+            emailInput.value = email; passInput.value = password; confirmInput.value = password;
             [emailInput, passInput, confirmInput].forEach(input => input.dispatchEvent(new Event('input', { bubbles: true })));
 
             await waitForElement('.generic-button.critical.large').then(e => e.click());
-            console.log("➡️ Đã nhấn 'Next', đang chờ captcha...");
+            await new Promise(r => setTimeout(r, 8000)); // Chờ captcha
 
-            await waitForCaptcha(30000);
-
-            const codeInput = await waitForElement('input[placeholder="Verification Code"]', 60000);
+            const codeInput = await waitForElement('input[placeholder="Verification Code"]');
             const code = await fetchVerificationCode(email);
-            if (!code) {
-                throw new Error("Không thể tự động lấy mã xác minh.");
-            }
+            if (!code) throw new Error("Không thể tự động lấy mã xác minh.");
 
             codeInput.value = code;
             codeInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -169,66 +87,39 @@
             await waitForElement('button.generic-button.critical.large:not([disabled])').then(e => e.click());
             console.log("✅ Đăng ký thành công!");
             
-            await new Promise(r => setTimeout(r, 3000)); // Chờ login và chuyển trang
+            await new Promise(r => setTimeout(r, 3000));
 
-            console.log(`🌐 Điều hướng đến link follow: ${followLink}`);
-            window.location.href = followLink;
-            await new Promise(r => setTimeout(r, 5000)); // Chờ trang tải
+            console.log(`🌐 Điều hướng đến link follow: ${conf.followLink}`);
+            window.location.href = conf.followLink;
+            await new Promise(r => setTimeout(r, 5000));
 
             await waitForElement('button.follow-button').then(e => e.click());
             console.log("✅ Đã nhấn nút Follow.");
 
-            console.log("🌐 Đăng xuất để chuẩn bị cho lần chạy tiếp theo...");
-            window.location.href = 'https://app.klingai.com/global/account/sign-out';
-            await new Promise(r => setTimeout(r, 3000)); // Chờ đăng xuất
+            // Cập nhật bộ đếm TRƯỚC KHI điều hướng trang cuối cùng
+            conf.currentRun++;
+            sessionStorage.setItem('klingBuffConfig', JSON.stringify(conf));
+            console.log(`✅ Hoàn thành lần chạy ${conf.currentRun - 1}. Chuẩn bị cho lần tiếp theo.`);
+
+            // Đăng xuất và bắt đầu vòng lặp mới
+            window.location.href = 'https://app.klingai.com/global';
 
         } catch (err) {
             console.error("❌ Flow thất bại:", err);
-            throw err;
+            alert(`Lỗi ở lần chạy ${config.currentRun}. Script sẽ dừng lại. Vui lòng làm mới trang và chạy lại script để bắt đầu phiên mới.`);
+            sessionStorage.removeItem('klingBuffConfig'); // Xóa cấu hình để có thể chạy lại từ đầu
         }
     }
 
-    // Hàm chính để chạy vòng lặp
-    async function main() {
-        const followLink = prompt("Nhập link buff follow (ví dụ: https://app.klingai.com/global/user-home/7054579/all):");
-        if (!followLink || !followLink.startsWith('https://app.klingai.com/')) {
-            return alert("❌ Link không hợp lệ.");
-        }
-
-        const runCount = parseInt(prompt("Nhập số lần chạy:"));
-        if (isNaN(runCount) || runCount <= 0) {
-            return alert("❌ Số lần chạy không hợp lệ.");
-        }
-
-        console.log(`🔄 Sẽ chạy ${runCount} lần với link: ${followLink}`);
-
-        for (let i = 1; i <= runCount; i++) {
-            console.log(`\n\n--- Bắt đầu lần chạy thứ ${i}/${runCount} ---`);
-            try {
-                // Điều hướng về trang chủ để reset trạng thái
-                window.location.href = 'https://app.klingai.com/global';
-                await new Promise(r => setTimeout(r, 5000)); // Chờ trang chủ tải xong
-
-                await runFlow(followLink);
-                console.log(`✅ Hoàn thành lần chạy thứ ${i}`);
-            } catch (err) {
-                console.error(`❌ Lỗi ở lần chạy thứ ${i}:`, err);
-                alert(`Lỗi ở lần chạy ${i}. Vui lòng kiểm tra Console (F12) để biết chi tiết. Script sẽ dừng lại.`);
-                break;
-            }
-            if (i < runCount) {
-                console.log(`⏳ Chuẩn bị cho lần chạy tiếp theo...`);
-            }
-        }
-        console.log("🎉 Đã hoàn thành tất cả các lần chạy!");
-        alert("🎉 Đã hoàn thành tất cả các lần chạy!");
+    // 3. CHẠY FLOW HIỆN TẠI
+    // Chỉ chạy flow nếu đang ở trang chủ Kling
+    if (window.location.href.includes('https://app.klingai.com/global')) {
+        await runFlow(config);
     }
 
-    // Bắt đầu chạy chương trình
-    try {
-        await main();
-    } catch (err) {
-        console.error("❌ Script gặp lỗi không mong muốn:", err);
-        alert("Script gặp lỗi không mong muốn. Vui lòng kiểm tra Console (F12).");
-    }
+    /* Thêm lại các hàm đã bị ẩn để script hoàn chỉnh */
+    function generatePassword(length = 10) { const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*"; let password = ""; for (let i = 0; i < length; i++) { password += chars.charAt(Math.floor(Math.random() * chars.length)); } return password; }
+    async function fetchEmail() { const res = await fetch(`${YOUR_VERCEL_APP_URL}/api/create-email`, { method: 'POST' }); if (!res.ok) throw new Error("Không thể gọi API create-email trên Vercel."); const json = await res.json(); console.log(`✅ Lấy email thành công: ${json.email}`); return { email: json.email }; }
+    async function fetchVerificationCode(email) { console.log(`⏳ Đang tìm mã xác minh cho ${email}...`); for (let i = 0; i < 30; i++) { try { const res = await fetch(`${YOUR_VERCEL_APP_URL}/api/check-email`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email }) }); const json = await res.json(); if (json && json.text) { const match = json.text.match(/\b\d{6}\b/); if (match) { console.log(`✅ Tìm thấy mã: ${match[0]}`); return match[0]; } } await new Promise(r => setTimeout(r, 2000)); } catch (err) { console.error("Lỗi khi gọi check-email:", err); } } console.warn("⚠️ Hết thời gian chờ, không tìm thấy mã xác minh."); return null; }
+    async function waitForElement(selector, timeout = 15000) { return new Promise((resolve, reject) => { const el = document.querySelector(selector); if (el) return resolve(el); const observer = new MutationObserver(() => { const foundEl = document.querySelector(selector); if (foundEl) { observer.disconnect(); resolve(foundEl); } }); observer.observe(document.body, { childList: true, subtree: true }); setTimeout(() => { observer.disconnect(); reject(new Error(`Timeout chờ phần tử: ${selector}`)); }, timeout); }); }
 })();
